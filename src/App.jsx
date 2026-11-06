@@ -1,300 +1,705 @@
 import React, { useState, useEffect } from "react";
+import "./style.css";
 
-const STORAGE_PROFILE = "omnixara_profile";
-const STORAGE_POSTS = "omnixara_posts";
-
-function loadProfile() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_PROFILE)); } catch { return null; }
-}
-function loadPosts() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_POSTS)) || []; } catch { return []; }
-}
-function savePosts(posts) {
-  localStorage.setItem(STORAGE_POSTS, JSON.stringify(posts));
-}
-function initials(name) {
-  return (name || "U").trim().slice(0, 1).toUpperCase();
-}
-function timeAgo(ts) {
-  const s = Math.floor((Date.now() - ts) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return Math.floor(s / 60) + "m";
-  if (s < 86400) return Math.floor(s / 3600) + "h";
-  return Math.floor(s / 86400) + "d";
-}
-
-const COUNTRIES = [
-  { code: "NG", name: "Nigeria", currency: "NGN", symbol: "₦" },
-  { code: "US", name: "United States", currency: "USD", symbol: "$" },
-  { code: "GB", name: "United Kingdom", currency: "GBP", symbol: "£" },
-  { code: "GH", name: "Ghana", currency: "GHS", symbol: "₵" },
-  { code: "KE", name: "Kenya", currency: "KES", symbol: "KSh" },
-  { code: "ZA", name: "South Africa", currency: "ZAR", symbol: "R" },
-  { code: "EU", name: "Eurozone", currency: "EUR", symbol: "€" },
-  { code: "IN", name: "India", currency: "INR", symbol: "₹" },
-  { code: "OTHER", name: "Other / Global", currency: "USD", symbol: "$" },
-];
-
-function SignUp({ onDone }) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [nin, setNin] = useState("");
-  const [countryCode, setCountryCode] = useState("OTHER");
-
-  function submit() {
-    if (!name.trim() || !email.trim()) { alert("Please enter at least your name and email."); return; }
-    const country = COUNTRIES.find(c => c.code === countryCode);
-    const profile = { name, email, phone, nin, country: country.name, currency: country.currency, symbol: country.symbol, verified: false, createdAt: Date.now() };
-    localStorage.setItem(STORAGE_PROFILE, JSON.stringify(profile));
-    onDone(profile);
-  }
-
-  return (
-    <div className="screen">
-      <h2 className="sec">Create your account</h2>
-      <div className="label">Full name</div>
-      <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" />
-      <div className="label">Email</div>
-      <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="you@example.com" />
-      <div className="label">Country</div>
-      <select value={countryCode} onChange={e => setCountryCode(e.target.value)}>
-        {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
-      </select>
-      <div className="label">Phone number (with country code)</div>
-      <input value={phone} onChange={e => setPhone(e.target.value)} type="tel" placeholder="+1, +44, +234..." />
-      <div className="label">National ID number</div>
-      <input value={nin} onChange={e => setNin(e.target.value)} placeholder="ID number" />
-      <button className="btn" onClick={submit}>Create account</button>
-      <p className="note">
-        <span className="pill">Verification pending</span>&nbsp;
-        ID and phone aren't checked against a government or SMS service yet — that needs a licensed verification
-        partner connected first. Posting and the feed work now.
-      </p>
-    </div>
-  );
-}
-
-function Composer({ profile, onPosted }) {
-  const [text, setText] = useState("");
-  function submit() {
-    if (!text.trim()) { alert("Write something first."); return; }
-    const posts = loadPosts();
-    posts.unshift({
-      id: "p" + Date.now(),
-      authorName: profile.name,
-      text,
-      createdAt: Date.now(),
-      likedBy: [],
-      views: Math.floor(Math.random() * 20),
-    });
-    savePosts(posts);
-    setText("");
-    onPosted();
-  }
-  return (
-    <div className="screen">
-      <h2 className="sec">New post</h2>
-      <textarea value={text} onChange={e => setText(e.target.value)} placeholder="What's happening?" />
-      <button className="btn" onClick={submit}>Post</button>
-      <p className="note">Saved on this device for now — connect a shared database to make posts visible to everyone (see README).</p>
-    </div>
-  );
-}
-
-function Feed({ profile }) {
-  const [posts, setPosts] = useState(loadPosts());
-
-  function toggleLike(id) {
-    const updated = posts.map(p => {
-      if (p.id !== id) return p;
-      const likedBy = p.likedBy.includes(profile.email)
-        ? p.likedBy.filter(e => e !== profile.email)
-        : [...p.likedBy, profile.email];
-      return { ...p, likedBy };
-    });
-    setPosts(updated);
-    savePosts(updated);
-  }
-
-  if (!posts.length) {
-    return <div className="screen"><p className="note">No posts yet — tap Post to share the first one.</p></div>;
-  }
-
-  return (
-    <div className="screen">
-      {posts.map(p => (
-        <div className="card" key={p.id}>
-          <div className="post-head">
-            <div className="avatar">{initials(p.authorName)}</div>
-            <div>
-              <div className="post-name">{p.authorName}</div>
-              <div className="post-time">{timeAgo(p.createdAt)}</div>
-            </div>
-          </div>
-          <p className="post-body">{p.text}</p>
-          <div className="post-actions">
-            <button
-              className={"act" + (p.likedBy.includes(profile.email) ? " liked" : "")}
-              onClick={() => toggleLike(p.id)}
-            >
-              ♥ {p.likedBy.length}
-            </button>
-            <div className="act">👁 {p.views} views</div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Dashboard({ profile }) {
-  const mine = loadPosts().filter(p => p.authorName === profile.name);
-  const totalLikes = mine.reduce((s, p) => s + p.likedBy.length, 0);
-  const totalViews = mine.reduce((s, p) => s + p.views, 0);
-  return (
-    <div className="screen">
-      <h2 className="sec">Your dashboard</h2>
-      <div className="stat-grid">
-        <div className="stat"><div className="stat-num">{mine.length}</div><div className="stat-label">Posts</div></div>
-        <div className="stat"><div className="stat-num">{totalLikes}</div><div className="stat-label">Total likes</div></div>
-        <div className="stat"><div className="stat-num">{totalViews}</div><div className="stat-label">Total views</div></div>
-        <div className="stat"><div className="stat-num">{profile.symbol || "$"}0</div><div className="stat-label">Earnings ({profile.currency || "USD"})</div></div>
-      </div>
-      <p className="note">Pay-per-view earnings activate once a licensed payment partner is connected — see the roadmap doc.</p>
-    </div>
-  );
-}
-
-function Assistant() {
-  const [messages, setMessages] = useState([
-    { role: "system", text: "Connect an API key to make this assistant real — see README for setup." }
-  ]);
-  const [input, setInput] = useState("");
-  function send() {
-    if (!input.trim()) return;
-    setMessages(m => [...m, { role: "user", text: input }, { role: "system", text: "This assistant isn't wired to an AI yet. Add your API key in src/assistant.js to activate it." }]);
-    setInput("");
-  }
-  return (
-    <div className="screen">
-      <h2 className="sec">Assistant</h2>
-      <div className="card" style={{ minHeight: 180 }}>
-        {messages.map((m, i) => (
-          <p key={i} className="post-body" style={{ opacity: m.role === "system" ? 0.7 : 1 }}>
-            {m.role === "user" ? "You: " : ""}{m.text}
-          </p>
-        ))}
-      </div>
-      <input value={input} onChange={e => setInput(e.target.value)} placeholder="Ask the assistant..." onKeyDown={e => e.key === "Enter" && send()} />
-      <button className="btn" onClick={send}>Send</button>
-    </div>
-  );
-}
-
-function Hero({ onStart }) {
-  return (
-    <div className="hero">
-      <div className="hero-orb" />
-      <div className="hero-inner">
-        <div className="hero-mark">VEYRON NEXUS</div>
-        <h1>One platform.<br />Built to grow<br />with you.</h1>
-        <p className="hero-sub">A feed, an assistant, and a community that upgrades over time — starting here.</p>
-        <button className="btn btn-hero" onClick={onStart}>Enter Veyron Nexus</button>
-      </div>
-    </div>
-  );
-}
+const STORAGE = {
+  profile: "veyron_nexus_profile",
+  posts: "veyron_nexus_posts"
+};
 
 const WORKSPACES = [
-  { id: "social", name: "Social & Feed", icon: "◈", live: true, desc: "Feed, posting, likes — live now." },
-  { id: "ai", name: "AI Assistant", icon: "✦", live: true, desc: "Chat panel built; connect an API key to activate real responses." },
-  { id: "business", name: "Business", icon: "▣", live: false, desc: "CRM, project management, employee tools." },
-  { id: "financial", name: "Financial", icon: "◎", live: false, desc: "Budgets, invoices, multi-currency reporting." },
-  { id: "marketplace", name: "Marketplace", icon: "◇", live: false, desc: "Buy, sell, hire freelancers, storefronts." },
-  { id: "cybersecurity", name: "Cybersecurity", icon: "◆", live: false, desc: "Verified security services, audits, training — authorised defensive work only." },
-  { id: "developer", name: "Developer", icon: "◫", live: false, desc: "Code projects, deployment, version control." },
-  { id: "research", name: "Research", icon: "◪", live: false, desc: "Scientific tools, data analysis, collaboration." },
-  { id: "education", name: "Education", icon: "◉", live: false, desc: "Tutors, lessons, progress tracking." },
-  { id: "admin", name: "Administration", icon: "⬡", live: false, desc: "User, role, and platform management." },
+  {
+    id: "intelligence",
+    name: "AI Intelligence",
+    description: "Artificial intelligence, intelligent assistants and model operations.",
+    category: "INTELLIGENCE",
+    status: "FOUNDATION"
+  },
+  {
+    id: "automation",
+    name: "Automation Systems",
+    description: "Design workflows, automate tasks and coordinate operations.",
+    category: "OPERATIONS",
+    status: "FOUNDATION"
+  },
+  {
+    id: "development",
+    name: "Developer Environment",
+    description: "Software development, code management and technical tools.",
+    category: "ENGINEERING",
+    status: "FOUNDATION"
+  },
+  {
+    id: "research",
+    name: "Research Laboratory",
+    description: "Research environments, analysis and knowledge management.",
+    category: "RESEARCH",
+    status: "FOUNDATION"
+  },
+  {
+    id: "cybersecurity",
+    name: "Cybersecurity Centre",
+    description: "Security education, system monitoring and defensive operations.",
+    category: "SECURITY",
+    status: "FOUNDATION"
+  },
+  {
+    id: "business",
+    name: "Business Intelligence",
+    description: "Business operations, planning and performance analysis.",
+    category: "BUSINESS",
+    status: "FOUNDATION"
+  },
+  {
+    id: "cloud",
+    name: "Cloud Infrastructure",
+    description: "Cloud resources, infrastructure management and deployment.",
+    category: "INFRASTRUCTURE",
+    status: "FOUNDATION"
+  },
+  {
+    id: "education",
+    name: "Education Systems",
+    description: "Learning environments, educational resources and study tools.",
+    category: "KNOWLEDGE",
+    status: "FOUNDATION"
+  },
+  {
+    id: "marketplace",
+    name: "Digital Marketplace",
+    description: "A foundation for digital products, services and collaboration.",
+    category: "ECONOMY",
+    status: "FOUNDATION"
+  }
 ];
 
-function Workspaces({ onOpen }) {
-  return (
-    <div className="screen">
-      <h2 className="sec">Workspaces</h2>
-      <p className="note" style={{ marginBottom: 16 }}>Every section is listed honestly — live means working today, foundation means planned and not yet connected.</p>
-      <div className="ws-grid">
-        {WORKSPACES.map(w => (
-          <button key={w.id} className="ws-card" onClick={() => onOpen(w)}>
-            <div className="ws-icon">{w.icon}</div>
-            <div className="ws-name">{w.name}</div>
-            <div className={w.live ? "status-live" : "status-foundation"}>{w.live ? "● Live" : "○ Foundation"}</div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
+function readStorage(key, fallback) {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
-function WorkspaceDetail({ ws, onBack }) {
-  if (ws.id === "ai") {
+function App() {
+  const [profile, setProfile] = useState(() =>
+    readStorage(STORAGE.profile, null)
+  );
+
+  const [posts, setPosts] = useState(() =>
+    readStorage(STORAGE.posts, [])
+  );
+
+  const [page, setPage] = useState("overview");
+  const [workspace, setWorkspace] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const [postText, setPostText] = useState("");
+  const [assistantInput, setAssistantInput] = useState("");
+
+  const [messages, setMessages] = useState([
+    {
+      role: "system",
+      text: "Veyron-Nexus Intelligence interface initialized. An AI provider has not yet been connected."
+    }
+  ]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE.posts, JSON.stringify(posts));
+  }, [posts]);
+
+  useEffect(() => {
+    if (profile) {
+      localStorage.setItem(STORAGE.profile, JSON.stringify(profile));
+    }
+  }, [profile]);
+
+  function notify(message) {
+    setNotice(message);
+    setTimeout(() => setNotice(""), 3500);
+  }
+
+  function register(event) {
+    event.preventDefault();
+
+    const form = new FormData(event.currentTarget);
+
+    const newProfile = {
+      name: form.get("name").trim(),
+      email: form.get("email").trim(),
+      createdAt: new Date().toISOString()
+    };
+
+    if (!newProfile.name || !newProfile.email) {
+      notify("Please complete all required fields.");
+      return;
+    }
+
+    setProfile(newProfile);
+    notify("Local profile created successfully.");
+  }
+
+  function logout() {
+    localStorage.removeItem(STORAGE.profile);
+    setProfile(null);
+    setPage("overview");
+    notify("You have signed out of this local session.");
+  }
+
+  function publishPost(event) {
+    event.preventDefault();
+
+    if (!postText.trim()) return;
+
+    if (!profile) {
+      notify("Create a local profile before publishing.");
+      return;
+    }
+
+    const newPost = {
+      id: crypto.randomUUID
+        ? crypto.randomUUID()
+        : String(Date.now()),
+      author: profile.name,
+      text: postText.trim(),
+      createdAt: new Date().toISOString(),
+      likes: 0
+    };
+
+    setPosts(previous => [newPost, ...previous]);
+    setPostText("");
+    notify("Post saved on this device.");
+  }
+
+  function likePost(id) {
+    setPosts(previous =>
+      previous.map(post =>
+        post.id === id
+          ? { ...post, likes: post.likes + 1 }
+          : post
+      )
+    );
+  }
+
+  function sendAssistantMessage(event) {
+    event.preventDefault();
+
+    const question = assistantInput.trim();
+    if (!question) return;
+
+    setMessages(previous => [
+      ...previous,
+      { role: "user", text: question },
+      {
+        role: "system",
+        text: "The Veyron-Nexus AI interface is ready, but no AI model provider is connected yet. Connect a secure backend and AI API to enable real responses."
+      }
+    ]);
+
+    setAssistantInput("");
+  }
+
+  function navigate(destination) {
+    setPage(destination);
+    setWorkspace(null);
+    setMenuOpen(false);
+  }
+
+  const filteredWorkspaces = WORKSPACES.filter(item =>
+    `${item.name} ${item.description} ${item.category}`
+      .toLowerCase()
+      .includes(search.toLowerCase())
+  );
+
+  function openWorkspace(item) {
+    setWorkspace(item);
+    setPage("workspace");
+  }
+
+  function Header() {
     return (
-      <div className="screen">
-        <button className="back-btn" onClick={onBack}>← Workspaces</button>
-        <Assistant />
+      <header className="topbar">
+        <button
+          className="brand"
+          onClick={() => navigate("overview")}
+        >
+          <span className="brand-symbol">V</span>
+          <span>VEYRON<span className="brand-light">-NEXUS</span></span>
+        </button>
+
+        <div className="header-right">
+          <span className="system-indicator">
+            <span className="indicator-dot"></span>
+            SYSTEM ONLINE
+          </span>
+
+          <button
+            className="menu-button"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            ☰
+          </button>
+        </div>
+      </header>
+    );
+  }
+
+  function Sidebar() {
+    const navigation = [
+      { id: "overview", icon: "⌂", label: "Overview" },
+      { id: "intelligence", icon: "◈", label: "AI Intelligence" },
+      { id: "workspaces", icon: "▦", label: "Workspaces" },
+      { id: "feed", icon: "◉", label: "Community Feed" },
+      { id: "dashboard", icon: "▤", label: "Dashboard" }
+    ];
+
+    return (
+      <aside className={`sidebar ${menuOpen ? "sidebar-open" : ""}`}>
+        <div className="sidebar-label">CONTROL CENTRE</div>
+
+        {navigation.map(item => (
+          <button
+            key={item.id}
+            className={`nav-item ${page === item.id ? "active" : ""}`}
+            onClick={() => {
+              if (item.id === "intelligence") {
+                navigate("assistant");
+              } else {
+                navigate(item.id);
+              }
+            }}
+          >
+            <span className="nav-icon">{item.icon}</span>
+            {item.label}
+          </button>
+        ))}
+
+        <div className="sidebar-divider"></div>
+
+        <div className="sidebar-label">INFRASTRUCTURE</div>
+
+        <div className="sidebar-small-item">Cloud Systems</div>
+        <div className="sidebar-small-item">Developer Tools</div>
+        <div className="sidebar-small-item">Security Operations</div>
+
+        <div className="sidebar-bottom">
+          <div className="connection-label">PLATFORM STATUS</div>
+          <div className="connection-value">FRONTEND ACTIVE</div>
+          <div className="connection-description">
+            Backend integrations pending
+          </div>
+        </div>
+      </aside>
+    );
+  }
+
+  function Overview() {
+    return (
+      <>
+        <section className="hero-panel">
+          <div className="eyebrow">UNIFIED TECHNOLOGY ENVIRONMENT</div>
+
+          <h1>
+            ONE SYSTEM.
+            <br />
+            <span>INFINITE POSSIBILITIES.</span>
+          </h1>
+
+          <p>
+            A unified environment for artificial intelligence,
+            development, research, automation and digital operations.
+          </p>
+
+          <div className="hero-actions">
+            <button
+              className="primary-button"
+              onClick={() => navigate("workspaces")}
+            >
+              EXPLORE SYSTEMS →
+            </button>
+
+            <button
+              className="secondary-button"
+              onClick={() => navigate("assistant")}
+            >
+              OPEN INTELLIGENCE
+            </button>
+          </div>
+
+          <div className="hero-footer">
+            VEYRON-NEXUS / UNIFIED PLATFORM / VERSION 1.0
+          </div>
+        </section>
+
+        <section className="section-block">
+          <div className="section-heading">
+            <div>
+              <div className="eyebrow">SYSTEM ARCHITECTURE</div>
+              <h2>Core environments</h2>
+            </div>
+
+            <button
+              className="text-button"
+              onClick={() => navigate("workspaces")}
+            >
+              VIEW ALL →
+            </button>
+          </div>
+
+          <div className="workspace-grid">
+            {WORKSPACES.slice(0, 6).map(item => (
+              <button
+                className="workspace-card"
+                key={item.id}
+                onClick={() => openWorkspace(item)}
+              >
+                <div className="card-topline">
+                  <span>{item.category}</span>
+                  <span className="card-arrow">↗</span>
+                </div>
+
+                <h3>{item.name}</h3>
+                <p>{item.description}</p>
+
+                <div className="card-status">
+                  <span className="status-square"></span>
+                  {item.status}
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="section-block">
+          <div className="section-heading">
+            <div>
+              <div className="eyebrow">PLATFORM ACTIVITY</div>
+              <h2>Current environment</h2>
+            </div>
+          </div>
+
+          <div className="system-grid">
+            <div className="system-card">
+              <span>FRONTEND</span>
+              <strong>ACTIVE</strong>
+              <small>Application interface running</small>
+            </div>
+
+            <div className="system-card">
+              <span>DATABASE</span>
+              <strong>NOT CONNECTED</strong>
+              <small>Persistent cloud storage pending</small>
+            </div>
+
+            <div className="system-card">
+              <span>AI ENGINE</span>
+              <strong>NOT CONNECTED</strong>
+              <small>Model integration pending</small>
+            </div>
+          </div>
+        </section>
+      </>
+    );
+  }
+
+  function Workspaces() {
+    return (
+      <section className="page-section">
+        <div className="eyebrow">PLATFORM MODULES</div>
+        <h1 className="page-title">Workspaces</h1>
+
+        <p className="page-description">
+          Explore the environments that make up Veyron-Nexus.
+        </p>
+
+        <input
+          className="search-input"
+          placeholder="Search systems and environments..."
+          value={search}
+          onChange={event => setSearch(event.target.value)}
+        />
+
+        <div className="workspace-grid">
+          {filteredWorkspaces.map(item => (
+            <button
+              className="workspace-card"
+              key={item.id}
+              onClick={() => openWorkspace(item)}
+            >
+              <div className="card-topline">
+                <span>{item.category}</span>
+                <span className="card-arrow">↗</span>
+              </div>
+
+              <h3>{item.name}</h3>
+              <p>{item.description}</p>
+
+              <div className="card-status">
+                <span className="status-square"></span>
+                {item.status}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {filteredWorkspaces.length === 0 && (
+          <div className="empty-state">No matching systems found.</div>
+        )}
+      </section>
+    );
+  }
+
+  function WorkspaceDetail() {
+    if (!workspace) return null;
+
+    return (
+      <section className="page-section">
+        <button
+          className="text-button back-button"
+          onClick={() => navigate("workspaces")}
+        >
+          ← ALL WORKSPACES
+        </button>
+
+        <div className="eyebrow">{workspace.category}</div>
+        <h1 className="page-title">{workspace.name}</h1>
+
+        <p className="page-description">
+          {workspace.description}
+        </p>
+
+        <div className="detail-panel">
+          <div className="detail-icon">◈</div>
+          <h2>Environment foundation</h2>
+
+          <p>
+            This workspace is part of the Veyron-Nexus architecture.
+            Its full operational services have not yet been connected.
+          </p>
+
+          <div className="detail-status">
+            DEVELOPMENT STATUS: FOUNDATION
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  function Assistant() {
+    return (
+      <section className="page-section assistant-page">
+        <div className="eyebrow">INTELLIGENCE ENVIRONMENT</div>
+        <h1 className="page-title">AI Intelligence</h1>
+
+        <p className="page-description">
+          Central interface for future AI model and agent integrations.
+        </p>
+
+        <div className="assistant-status">
+          <span className="status-square"></span>
+          AI PROVIDER NOT CONNECTED
+        </div>
+
+        <div className="chat-window">
+          {messages.map((message, index) => (
+            <div
+              key={index}
+              className={`chat-message ${message.role}`}
+            >
+              <span className="message-label">
+                {message.role === "user" ? "YOU" : "SYSTEM"}
+              </span>
+              <p>{message.text}</p>
+            </div>
+          ))}
+        </div>
+
+        <form className="chat-form" onSubmit={sendAssistantMessage}>
+          <input
+            value={assistantInput}
+            onChange={event => setAssistantInput(event.target.value)}
+            placeholder="Enter a message..."
+          />
+
+          <button type="submit">SEND →</button>
+        </form>
+
+        <p className="small-note">
+          This is currently an interface preview, not a connected AI model.
+        </p>
+      </section>
+    );
+  }
+
+  function Feed() {
+    return (
+      <section className="page-section">
+        <div className="eyebrow">COMMUNITY ENVIRONMENT</div>
+        <h1 className="page-title">Community Feed</h1>
+
+        <p className="page-description">
+          Share updates and communicate with the Veyron-Nexus community.
+        </p>
+
+        {profile ? (
+          <form className="composer" onSubmit={publishPost}>
+            <textarea
+              value={postText}
+              onChange={event => setPostText(event.target.value)}
+              placeholder="Write something..."
+            />
+
+            <button className="primary-button" type="submit">
+              PUBLISH POST
+            </button>
+          </form>
+        ) : (
+          <div className="detail-panel">
+            Create a local profile to publish posts.
+          </div>
+        )}
+
+        <div className="feed-list">
+          {posts.map(post => (
+            <article className="feed-post" key={post.id}>
+              <div className="post-author">{post.author}</div>
+
+              <p>{post.text}</p>
+
+              <div className="post-footer">
+                <span>
+                  {new Date(post.createdAt).toLocaleString()}
+                </span>
+
+                <button onClick={() => likePost(post.id)}>
+                  ♡ {post.likes}
+                </button>
+              </div>
+            </article>
+          ))}
+
+          {posts.length === 0 && (
+            <div className="empty-state">
+              No community posts yet.
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  function Dashboard() {
+    const totalLikes = posts.reduce(
+      (total, post) => total + post.likes,
+      0
+    );
+
+    return (
+      <section className="page-section">
+        <div className="eyebrow">PERSONAL CONTROL CENTRE</div>
+        <h1 className="page-title">Dashboard</h1>
+
+        <p className="page-description">
+          Your local account and platform activity.
+        </p>
+
+        <div className="system-grid">
+          <div className="system-card">
+            <span>PROFILE</span>
+            <strong>{profile ? "ACTIVE" : "NOT CREATED"}</strong>
+            <small>Local device profile</small>
+          </div>
+
+          <div className="system-card">
+            <span>POSTS</span>
+            <strong>{posts.length}</strong>
+            <small>Posts stored on this device</small>
+          </div>
+
+          <div className="system-card">
+            <span>LIKES</span>
+            <strong>{totalLikes}</strong>
+            <small>Recorded local interactions</small>
+          </div>
+        </div>
+
+        {profile ? (
+          <div className="detail-panel">
+            <div className="eyebrow">ACCOUNT INFORMATION</div>
+            <h2>{profile.name}</h2>
+            <p>{profile.email}</p>
+            <button className="secondary-button" onClick={logout}>
+              SIGN OUT
+            </button>
+          </div>
+        ) : (
+          <div className="detail-panel">
+            <h2>Create your profile</h2>
+
+            <form className="signup-form" onSubmit={register}>
+              <input name="name" placeholder="Full name" required />
+              <input
+                name="email"
+                type="email"
+                placeholder="Email address"
+                required
+              />
+
+              <button className="primary-button" type="submit">
+                CREATE LOCAL PROFILE
+              </button>
+            </form>
+
+            <p className="small-note">
+              This creates a profile on this device only. Secure
+              account registration will require a backend.
+            </p>
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  if (!profile && page === "register") {
+    return (
+      <div className="app-shell">
+        <Header />
+
+        <main className="main-content">
+          <Dashboard />
+        </main>
       </div>
     );
   }
+
   return (
-    <div className="screen">
-      <button className="back-btn" onClick={onBack}>← Workspaces</button>
-      <h2 className="sec">{ws.icon} {ws.name}</h2>
-      <div className="card">
-        <p className="post-body">{ws.desc}</p>
-        <span className={ws.live ? "status-live" : "status-foundation"}>{ws.live ? "● Live" : "○ Foundation — not yet connected"}</span>
+    <div className="app-shell">
+      <Header />
+
+      <div className="app-layout">
+        <Sidebar />
+
+        <main className="main-content">
+          {page === "overview" && <Overview />}
+          {page === "workspaces" && <Workspaces />}
+          {page === "workspace" && <WorkspaceDetail />}
+          {page === "assistant" && <Assistant />}
+          {page === "feed" && <Feed />}
+          {page === "dashboard" && <Dashboard />}
+
+          <footer className="app-footer">
+            <span>VEYRON-NEXUS</span>
+            <span>UNIFIED TECHNOLOGY PLATFORM</span>
+            <span>VERSION 1.0</span>
+          </footer>
+        </main>
       </div>
-      {!ws.live && <p className="note">This section is on the roadmap. It needs real development work, and some sections (financial, cybersecurity) also need licensed partners — see the roadmap document for the build order.</p>}
+
+      {notice && <div className="notification">{notice}</div>}
     </div>
   );
 }
 
-export default function App() {
-  const [profile, setProfile] = useState(loadProfile());
-  const [tab, setTab] = useState("feed");
-  const [entered, setEntered] = useState(false);
-  const [openWs, setOpenWs] = useState(null);
-
-  if (!profile) {
-    if (!entered) return <Hero onStart={() => setEntered(true)} />;
-    return <><Header /><SignUp onDone={setProfile} /></>;
-  }
-
-  return (
-    <>
-      <Header profile={profile} />
-      {tab === "feed" && <Feed profile={profile} />}
-      {tab === "post" && <Composer profile={profile} onPosted={() => setTab("feed")} />}
-      {tab === "dash" && <Dashboard profile={profile} />}
-      {tab === "ws" && !openWs && <Workspaces onOpen={setOpenWs} />}
-      {tab === "ws" && openWs && <WorkspaceDetail ws={openWs} onBack={() => setOpenWs(null)} />}
-      <div className="tabbar">
-        <button className={"tab" + (tab === "feed" ? " active" : "")} onClick={() => setTab("feed")}>Feed</button>
-        <button className={"tab" + (tab === "post" ? " active" : "")} onClick={() => setTab("post")}>Post</button>
-        <button className={"tab" + (tab === "ws" ? " active" : "")} onClick={() => { setTab("ws"); setOpenWs(null); }}>Workspaces</button>
-        <button className={"tab" + (tab === "dash" ? " active" : "")} onClick={() => setTab("dash")}>Dashboard</button>
-      </div>
-    </>
-  );
-}
-
-function Header({ profile }) {
-  return (
-    <header>
-      <nav>
-        <div className="brand">VEYRON NEXUS</div>
-        {profile && <div className="avatar" style={{ width: 30, height: 30, fontSize: 13 }}>{initials(profile.name)}</div>}
-      </nav>
-    </header>
-  );
-}
+export default App;
